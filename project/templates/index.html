@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CNN 手写数字识别系统</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .card-shadow {
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        
+        .drawing-canvas {
+            background: #f9fafb;
+            cursor: crosshair;
+        }
+        
+        .predict-glow {
+            animation: glow 2s ease-in-out infinite;
+        }
+        
+        @keyframes glow {
+            0%, 100% { box-shadow: 0 0 20px rgba(102, 126, 234, 0.3); }
+            50% { box-shadow: 0 0 40px rgba(102, 126, 234, 0.6); }
+        }
+        
+        .progress-bar {
+            transition: width 0.5s ease-out;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .number-display {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <!-- 标题区域 -->
+        <div class="text-center mb-12">
+            <h1 class="text-4xl font-bold text-gray-800 mb-4">
+                <span class="gradient-bg bg-clip-text text-transparent">🎨 CNN 手写数字识别系统</span>
+            </h1>
+            <p class="text-gray-600 text-lg">机器学习实验 - 交互式手写数字识别</p>
+            
+            <div class="flex justify-center gap-4 mt-6">
+                <div class="bg-blue-100 px-6 py-3 rounded-2xl">
+                    <span class="text-blue-700 font-medium">模型架构</span>
+                    <p class="text-blue-600 font-semibold">CNN (3层卷积)</p>
+                </div>
+                <div class="bg-green-100 px-6 py-3 rounded-2xl">
+                    <span class="text-green-700 font-medium">验证准确率</span>
+                    <p class="text-green-600 font-semibold">99.48%</p>
+                </div>
+                <div class="bg-purple-100 px-6 py-3 rounded-2xl">
+                    <span class="text-purple-700 font-medium">支持功能</span>
+                    <p class="text-purple-600 font-semibold">图片 + 手写板</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 主内容区域 -->
+        <div class="grid md:grid-cols-2 gap-8">
+            <!-- 左侧：绘图区域 -->
+            <div class="bg-white rounded-3xl card-shadow p-8">
+                <div class="mb-6">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">✏️</span>
+                        <h2 class="text-xl font-semibold text-gray-800">在画板上书写数字</h2>
+                    </div>
+                    <p class="text-gray-500 text-sm">用鼠标或触控笔书写 0-9</p>
+                </div>
+                
+                <!-- Canvas绘图区 -->
+                <div class="bg-gray-100 rounded-2xl p-4 mb-6">
+                    <div class="flex justify-center">
+                        <div class="relative">
+                            <canvas id="canvas" width="280" height="280" 
+                                    class="drawing-canvas border-4 border-gray-300 rounded-xl shadow-lg"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 控制按钮 -->
+                <div class="flex gap-4">
+                    <button id="predictBtn" 
+                            class="btn-primary flex-1 text-white font-semibold py-4 px-8 rounded-2xl flex items-center justify-center gap-2">
+                        <span class="text-xl">🔮</span>
+                        开始识别
+                    </button>
+                    <button id="clearBtn" 
+                            class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-4 px-8 rounded-2xl flex items-center gap-2 transition-all">
+                        <span class="text-xl">🗑️</span>
+                        清空
+                    </button>
+                </div>
+                
+                <!-- 画笔设置 -->
+                <div class="mt-6 flex items-center gap-4 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-600">画笔粗细：</span>
+                        <input type="range" id="brushSize" min="5" max="40" value="20" 
+                               class="w-32">
+                        <span id="brushSizeValue" class="text-blue-600 font-semibold">20</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <span class="text-gray-600">颜色：</span>
+                        <div class="flex gap-1">
+                            <button class="w-8 h-8 rounded-full bg-black border-2 border-gray-300 hover:border-blue-500 color-btn active" data-color="#000000"></button>
+                            <button class="w-8 h-8 rounded-full bg-gray-700 border-2 border-gray-300 hover:border-blue-500 color-btn" data-color="#374151"></button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 图片上传 -->
+                <div class="mt-6 pt-6 border-t border-gray-200">
+                    <p class="text-gray-600 text-sm mb-3">或者上传图片识别：</p>
+                    <label class="flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 border-2 border-dashed border-blue-300 rounded-xl py-4 px-6 cursor-pointer transition-all">
+                        <span class="text-2xl">📁</span>
+                        <span class="text-blue-700 font-medium">选择图片文件</span>
+                        <input type="file" id="imageUpload" accept="image/*" class="hidden">
+                    </label>
+                </div>
+            </div>
+            
+            <!-- 右侧：识别结果 -->
+            <div class="bg-white rounded-3xl card-shadow p-8">
+                <div class="mb-6">
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">📊</span>
+                        <h2 class="text-xl font-semibold text-gray-800">识别结果</h2>
+                    </div>
+                </div>
+                
+                <!-- 主要预测结果 -->
+                <div id="resultContainer" class="mb-8">
+                    <div class="number-display rounded-2xl p-8 mb-6 text-center">
+                        <p class="text-gray-500 text-sm uppercase tracking-wider mb-2">识别结果</p>
+                        <div id="mainPrediction" class="text-9xl font-bold text-gray-300">?</div>
+                    </div>
+                    
+                    <!-- 置信度 -->
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <div class="flex justify-between mb-2">
+                            <span class="text-gray-600 font-medium">置信度</span>
+                            <span id="confidenceText" class="text-gray-800 font-bold">0%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-4">
+                            <div id="confidenceBar" class="progress-bar bg-gradient-to-r from-blue-500 to-purple-500 h-4 rounded-full" style="width: 0%"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Top3预测 -->
+                <div class="mb-8">
+                    <h3 class="text-lg font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                        <span>🎯</span> Top3 候选预测
+                    </h3>
+                    <div id="top3Container" class="space-y-3">
+                        <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-500">候选 #1</span>
+                            </div>
+                            <div class="w-full bg-gray-300 rounded-full h-3">
+                                <div class="h-3 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-500">候选 #2</span>
+                            </div>
+                            <div class="w-full bg-gray-300 rounded-full h-3">
+                                <div class="h-3 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                            <div class="flex justify-between mb-1">
+                                <span class="text-gray-500">候选 #3</span>
+                            </div>
+                            <div class="w-full bg-gray-300 rounded-full h-3">
+                                <div class="h-3 rounded-full" style="width: 0%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 提示信息 -->
+                <div class="bg-gradient-to-r from-blue-500 to-purple-500 rounded-2xl p-6 text-white">
+                    <h4 class="font-semibold mb-3 flex items-center gap-2">
+                        <span>💡</span> 使用提示
+                    </h4>
+                    <ul class="space-y-2 text-blue-100 text-sm">
+                        <li class="flex items-start gap-2">
+                            <span>•</span>
+                            <span>书写时尽量居中，写得清晰一些</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span>•</span>
+                            <span>只支持单个数字 0-9</span>
+                        </li>
+                        <li class="flex items-start gap-2">
+                            <span>•</span>
+                            <span>书写数字占画板 60-80% 空间效果最好</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 底部信息 -->
+        <div class="mt-12 text-center text-gray-500 text-sm">
+            <p>基于 PyTorch + Flask 构建 | CNN 手写数字识别实验</p>
+        </div>
+    </div>
+
+    <script>
+        // Canvas设置
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let brushColor = '#000000';
+        let brushSize = 20;
+        
+        // 初始化Canvas
+        ctx.fillStyle = '#f9fafb';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // 获取Canvas坐标
+        function getCoords(e) {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            if (e.touches && e.touches.length > 0) {
+                return {
+                    x: (e.touches[0].clientX - rect.left) * scaleX,
+                    y: (e.touches[0].clientY - rect.top) * scaleY
+                };
+            }
+            return {
+                x: (e.clientX - rect.left) * scaleX,
+                y: (e.clientY - rect.top) * scaleY
+            };
+        }
+        
+        // 开始绘制
+        function startDraw(e) {
+            isDrawing = true;
+            const coords = getCoords(e);
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+        
+        // 绘制
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+            
+            const coords = getCoords(e);
+            
+            ctx.beginPath();
+            ctx.moveTo(lastX, lastY);
+            ctx.lineTo(coords.x, coords.y);
+            ctx.strokeStyle = brushColor;
+            ctx.lineWidth = brushSize;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            ctx.stroke();
+            
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+        
+        // 结束绘制
+        function endDraw() {
+            isDrawing = false;
+        }
+        
+        // 绑定事件
+        canvas.addEventListener('mousedown', startDraw);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', endDraw);
+        canvas.addEventListener('mouseout', endDraw);
+        
+        canvas.addEventListener('touchstart', startDraw);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', endDraw);
+        
+        // 清空按钮
+        document.getElementById('clearBtn').addEventListener('click', function() {
+            ctx.fillStyle = '#f9fafb';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            resetDisplay();
+        });
+        
+        // 画笔大小
+        document.getElementById('brushSize').addEventListener('input', function() {
+            brushSize = parseInt(this.value);
+            document.getElementById('brushSizeValue').textContent = brushSize;
+        });
+        
+        // 颜色选择
+        document.querySelectorAll('.color-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.color-btn').forEach(b => {
+                    b.classList.remove('active', 'border-blue-500');
+                    b.classList.add('border-gray-300');
+                });
+                this.classList.add('active', 'border-blue-500');
+                brushColor = this.dataset.color;
+            });
+        });
+        
+        // 识别按钮
+        document.getElementById('predictBtn').addEventListener('click', predictDigit);
+        
+        // 图片上传
+        document.getElementById('imageUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    const img = new Image();
+                    img.onload = function() {
+                        ctx.fillStyle = '#f9fafb';
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        
+                        const scale = Math.min(canvas.width / img.width, canvas.height / img.height) * 0.8;
+                        const w = img.width * scale;
+                        const h = img.height * scale;
+                        const x = (canvas.width - w) / 2;
+                        const y = (canvas.height - h) / 2;
+                        
+                        ctx.drawImage(img, x, y, w, h);
+                        predictDigit();
+                    };
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+        
+        // 预测函数
+        async function predictDigit() {
+            const predictBtn = document.getElementById('predictBtn');
+            predictBtn.disabled = true;
+            predictBtn.innerHTML = '<span class="text-xl">⏳</span> 识别中...';
+            
+            const imageData = canvas.toDataURL('image/png');
+            
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ image: imageData })
+                });
+                
+                if (response.ok) {
+                    const result = await response.json();
+                    updateDisplay(result);
+                } else {
+                    alert('识别失败，请重试');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('请求错误，请检查服务是否运行');
+            }
+            
+            predictBtn.disabled = false;
+            predictBtn.innerHTML = '<span class="text-xl">🔮</span> 开始识别';
+        }
+        
+        // 更新显示
+        function updateDisplay(result) {
+            const mainPrediction = document.getElementById('mainPrediction');
+            const confidenceText = document.getElementById('confidenceText');
+            const confidenceBar = document.getElementById('confidenceBar');
+            const top3Container = document.getElementById('top3Container');
+            
+            mainPrediction.textContent = result.digit;
+            mainPrediction.classList.remove('text-gray-300');
+            mainPrediction.classList.add('text-gray-800', 'predict-glow');
+            
+            const confidencePercent = (result.confidence * 100).toFixed(1);
+            confidenceText.textContent = `${confidencePercent}%`;
+            confidenceBar.style.width = `${result.confidence * 100}%`;
+            
+            // 更新Top3
+            top3Container.innerHTML = result.top3.map((item, index) => {
+                const colors = ['from-blue-500 to-blue-600', 'from-green-500 to-green-600', 'from-purple-500 to-purple-600'];
+                return `
+                    <div class="bg-gray-50 rounded-xl p-4">
+                        <div class="flex justify-between mb-1">
+                            <span class="font-semibold text-gray-700">
+                                ${index === 0 ? '🏆' : index === 1 ? '🥈' : '🥉'} 
+                                预测: <span class="text-2xl font-bold text-blue-600">${item.digit}</span>
+                            </span>
+                            <span class="text-gray-600">${(item.confidence * 100).toFixed(0)}%</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-3">
+                            <div class="bg-gradient-to-r ${colors[index]} h-3 rounded-full transition-all duration-500" 
+                                 style="width: ${item.confidence * 100}%"></div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // 重置显示
+        function resetDisplay() {
+            const mainPrediction = document.getElementById('mainPrediction');
+            mainPrediction.textContent = '?';
+            mainPrediction.classList.add('text-gray-300');
+            mainPrediction.classList.remove('text-gray-800', 'predict-glow');
+            
+            document.getElementById('confidenceText').textContent = '0%';
+            document.getElementById('confidenceBar').style.width = '0%';
+            
+            document.getElementById('top3Container').innerHTML = `
+                <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-500">候选 #1</span>
+                    </div>
+                    <div class="w-full bg-gray-300 rounded-full h-3">
+                        <div class="h-3 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-500">候选 #2</span>
+                    </div>
+                    <div class="w-full bg-gray-300 rounded-full h-3">
+                        <div class="h-3 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+                <div class="bg-gray-50 rounded-xl p-4 opacity-50">
+                    <div class="flex justify-between mb-1">
+                        <span class="text-gray-500">候选 #3</span>
+                    </div>
+                    <div class="w-full bg-gray-300 rounded-full h-3">
+                        <div class="h-3 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>
